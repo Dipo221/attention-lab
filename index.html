@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>注意力實驗室 Attention Lab｜親手玩一次 Self-Attention</title>
+<meta name="description" content="輸入一句話，即時看見 Q/K/V、注意力權重熱力圖、√dk 縮放、位置編碼時鐘，以及 RNN 與 Transformer 的平行化差異。">
+<style>
+:root{
+  --bg:#F2F4EF; --panel:#FFFFFF; --panel-2:#F0F2EB; --cell:#F4F6F0;
+  --text:#16202B; --muted:#6E7A80; --line:#DCE0D4; --line-soft:#E8EBE1;
+  --accent:#4A7A46; --accent-rgb:74,122,70;
+  --blue:#1B3A5C; --blue-rgb:40,96,150;
+  --warm:#9A6B1F; --warm-rgb:176,112,40;
+  --shadow:0 10px 30px rgba(28,40,34,.07);
+  --f-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+  --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+}
+:root[data-theme="dark"]{
+  --bg:#11161A; --panel:#181F23; --panel-2:#212A2E; --cell:#1C2429;
+  --text:#E7EBE6; --muted:#8D9A99; --line:#2C3639; --line-soft:#232C30;
+  --accent:#84BC7E; --accent-rgb:132,188,126;
+  --blue:#8FB6D8; --blue-rgb:143,182,216;
+  --warm:#D6A85C; --warm-rgb:214,168,92;
+  --shadow:0 14px 36px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:16px;line-height:1.7;
+  -webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- topbar ---------- */
+.topbar{position:sticky;top:0;z-index:30;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:rgba(255,255,255,.88);border-bottom:1px solid var(--line);backdrop-filter:blur(14px)}
+:root[data-theme="dark"] .topbar{background:rgba(24,31,35,.88)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.mark{width:38px;height:38px;border-radius:10px;background:var(--blue);display:grid;place-items:center;color:#fff;
+  font-family:var(--f-mono);font-size:15px;font-weight:700;flex:0 0 auto}
+:root[data-theme="dark"] .mark{color:#11161A}
+.brandtext{line-height:1.2;min-width:0}
+.brandtext strong{display:block;font-size:14.5px}
+.brandtext span{font-size:11px;color:var(--muted);font-family:var(--f-mono);letter-spacing:.08em}
+.spacer{flex:1}
+.iconbtn{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;min-width:40px;height:38px;padding:0 11px;
+  display:grid;place-items:center;font-size:13px}
+.iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+
+.tabbar{position:sticky;top:59px;z-index:28;display:flex;gap:2px;padding:0 10px;overflow-x:auto;
+  background:rgba(255,255,255,.88);border-bottom:1px solid var(--line);backdrop-filter:blur(14px);scrollbar-width:none}
+:root[data-theme="dark"] .tabbar{background:rgba(24,31,35,.88)}
+.tabbar::-webkit-scrollbar{display:none}
+.tab{border:0;background:transparent;padding:12px 13px 10px;font-size:13.5px;font-weight:700;color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab em{font-family:var(--f-mono);font-style:normal;font-size:10.5px;opacity:.65;margin-right:5px}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:24px 16px 90px}
+.hero{margin-bottom:18px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.hero h1{font-size:clamp(22px,3.2vw,31px);line-height:1.3;margin:5px 0 7px;font-weight:800;letter-spacing:-.01em}
+.lede{color:var(--muted);margin:0;font-size:14.5px;max-width:760px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);margin-bottom:14px}
+.cardhead{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cardhead strong{font-size:13.5px}
+.cardbody{padding:15px 16px}
+.sub{color:var(--muted);font-size:11.5px;font-family:var(--f-mono)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:14px;align-items:start}
+@media(max-width:880px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.65}
+.note b{color:var(--text)}
+code{font-family:var(--f-mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--line-soft);border-radius:5px;padding:1px 5px}
+.eq{font-family:var(--f-mono);font-size:13.5px;background:var(--panel-2);border:1px solid var(--line-soft);
+  border-radius:9px;padding:10px 13px;margin:10px 0;overflow-x:auto;white-space:nowrap}
+
+/* ---------- controls ---------- */
+.ctrlrow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field.grow{flex:1 1 320px}
+.field label{font-size:11px;font-family:var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.input{width:100%;height:42px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2);padding:0 13px;outline:none}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.16)}
+.slider{display:flex;align-items:center;gap:9px}
+.slider input[type=range]{width:118px;accent-color:var(--accent)}
+.slider .val{font-family:var(--f-mono);font-size:13px;font-weight:700;color:var(--accent);min-width:28px;text-align:right}
+.switch{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel-2);
+  border-radius:9px;height:38px;padding:0 12px;font-size:13px;user-select:none;cursor:pointer}
+.switch input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.switch.on{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.1)}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;height:38px;padding:0 14px;font-size:13px;font-weight:600}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#11161A}
+.btn.primary:hover{opacity:.88;color:#fff}
+:root[data-theme="dark"] .btn.primary:hover{color:#11161A}
+.samples{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chipbtn{border:1px solid var(--line);background:transparent;border-radius:99px;padding:4px 11px;font-size:12px;color:var(--muted)}
+.chipbtn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- tokens ---------- */
+.tokens{display:flex;gap:6px;flex-wrap:wrap}
+.tok{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:5px 11px;font-size:14px;
+  position:relative;transition:all .15s}
+.tok .i{font-family:var(--f-mono);font-size:9.5px;color:var(--muted);position:absolute;top:-7px;left:4px;
+  background:var(--panel);padding:0 3px;border-radius:3px}
+.tok.q{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+:root[data-theme="dark"] .tok.q{color:#11161A}
+.tok.q .i{color:var(--accent)}
+
+/* ---------- heatmap ---------- */
+.hmscroll{overflow-x:auto;padding-bottom:4px}
+.hm{display:grid;gap:2px;min-width:max-content}
+.hmcell{min-width:34px;height:34px;border-radius:5px;display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:10.5px;background:var(--cell);cursor:pointer;transition:transform .1s}
+.hmcell:hover{transform:scale(1.12);z-index:2;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.hmcell.dim{opacity:.52}
+.hmlbl{min-width:34px;height:34px;display:grid;place-items:center;font-size:11.5px;color:var(--muted);
+  overflow:hidden;white-space:nowrap;padding:0 3px}
+.hmlbl.row{justify-content:end;min-width:52px;text-align:right;cursor:pointer;border-radius:5px}
+.hmlbl.row:hover{background:var(--panel-2);color:var(--text)}
+.hmlbl.row.sel{color:var(--accent);font-weight:800}
+.hmlbl.corner{font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;color:var(--muted)}
+/* 位置編碼表的格子只有 16px 高，標籤要跟著縮才不會錯位 */
+.hm.compact .hmlbl{height:16px;font-family:var(--f-mono);font-size:9.5px}
+.hm.compact .hmlbl.row{min-width:40px}
+.legend{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.legend .ramp{width:92px;height:9px;border-radius:99px;border:1px solid var(--line-soft)}
+.segbtns{display:flex;gap:2px;border:1px solid var(--line);border-radius:9px;padding:2px;background:var(--panel-2)}
+.segbtns button{border:0;background:transparent;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--muted)}
+.segbtns button.on{background:var(--panel);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+
+/* ---------- bars ---------- */
+.bars{display:flex;flex-direction:column;gap:7px}
+.barrow{display:grid;grid-template-columns:58px minmax(0,1fr) 50px;gap:9px;align-items:center;font-size:13px}
+.barrow .nm{text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bartrack{height:17px;border-radius:5px;background:var(--cell);overflow:hidden}
+.barfill{height:100%;border-radius:5px;background:var(--accent);transition:width .3s cubic-bezier(.4,0,.2,1)}
+.barrow .pc{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);text-align:right}
+.barrow.top .nm{font-weight:800;color:var(--accent)}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin-top:4px}
+.kv dt{color:var(--muted);font-size:12px}
+.kv dd{margin:0;font-family:var(--f-mono);font-size:12.5px;font-weight:600}
+
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding:9px 0 9px 34px;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+.steps li:last-child{border-bottom:0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:10px;width:22px;height:22px;border-radius:6px;
+  background:var(--panel-2);border:1px solid var(--line);display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--accent)}
+.steps b{font-family:var(--f-mono);color:var(--accent);font-size:13px}
+
+.heads{display:flex;gap:10px;flex-wrap:wrap}
+.headcard{border:1px solid var(--line);border-radius:11px;padding:9px;background:var(--panel-2);cursor:pointer;transition:all .15s}
+.headcard:hover{border-color:var(--accent)}
+.headcard.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.22)}
+.headcard .ht{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);margin-bottom:6px;text-align:center}
+.headcard.on .ht{color:var(--accent);font-weight:700}
+.mini{display:grid;gap:1.5px}
+.minicell{width:13px;height:13px;border-radius:2px;background:var(--cell)}
+
+details.more{border-top:1px solid var(--line-soft);margin-top:4px}
+details.more summary{cursor:pointer;font-size:13px;color:var(--muted);padding:11px 0 2px;list-style:none;font-weight:600}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"▸ ";color:var(--accent)}
+details.more[open] summary::before{content:"▾ "}
+.matgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:10px}
+.matbox .mt{font-family:var(--f-mono);font-size:11px;color:var(--muted);margin-bottom:6px}
+.mrow{display:grid;gap:1.5px;margin-bottom:1.5px;grid-auto-flow:column;justify-content:start}
+.mcell{width:17px;height:17px;border-radius:2.5px;background:var(--cell)}
+
+.flash{animation:fl .5s ease}
+@keyframes fl{0%{background:rgba(var(--accent-rgb),.3)}100%{background:transparent}}
+
+/* race */
+.track{border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:11px;background:var(--panel-2)}
+.trackhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px;gap:10px;flex-wrap:wrap}
+.trackhead strong{font-size:14px}
+.trackhead .st{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.cells{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.rcell{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel);
+  display:grid;place-items:center;font-family:var(--f-mono);font-size:12px;color:var(--muted);transition:all .18s}
+.rcell.act{background:var(--warm);border-color:var(--warm);color:#fff;transform:scale(1.14);
+  box-shadow:0 4px 14px rgba(var(--warm-rgb),.45)}
+.rcell.fin{background:rgba(var(--accent-rgb),.2);border-color:var(--accent);color:var(--accent)}
+.arrow{color:var(--muted);font-size:13px}
+.verdict{border-left:3px solid var(--accent);padding:9px 0 9px 13px;font-size:13.5px;margin-top:4px}
+
+table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-soft)}
+table.t th{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;border-bottom:1px solid var(--line)}
+table.t td.n{font-family:var(--f-mono);text-align:right;white-space:nowrap}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:10.5px;padding:2px 9px;border-radius:99px;
+  background:rgba(var(--accent-rgb),.13);color:var(--accent);border:1px solid rgba(var(--accent-rgb),.3)}
+.pill.w{background:rgba(var(--warm-rgb),.13);color:var(--warm);border-color:rgba(var(--warm-rgb),.3)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);background:var(--text);color:var(--bg);
+  padding:9px 17px;border-radius:99px;font-size:13px;opacity:0;pointer-events:none;transition:.22s;z-index:60}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div class="brandtext">
+      <strong>注意力實驗室</strong>
+      <span>ATTENTION LAB</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button class="iconbtn" id="themeBtn" title="切換深／淺色">◐ 主題</button>
+</header>
+
+<nav class="tabbar" id="tabbar">
+  <button class="tab active" data-v="attn"><em>01</em>Self-Attention 實驗室</button>
+  <button class="tab" data-v="softmax"><em>02</em>softmax 與 √d<sub>k</sub></button>
+  <button class="tab" data-v="pos"><em>03</em>位置編碼時鐘</button>
+  <button class="tab" data-v="race"><em>04</em>RNN vs Transformer</button>
+  <button class="tab" data-v="about"><em>05</em>規格與說明</button>
+</nav>
+
+<main class="wrap">
+
+<!-- ================= 01 ATTENTION ================= -->
+<section id="v-attn">
+  <div class="hero">
+    <div class="eyebrow">Module 01</div>
+    <h1>Self-Attention 實驗室</h1>
+    <p class="lede">輸入一句話，每個字都會去問「我該注意誰」。下面的每一個數字都是這一頁即時算出來的
+      ——<code>Attention(Q,K,V)=softmax(QKᵀ/√d<sub>k</sub>)V</code>。點任何一個字，看它的注意力分到哪裡去。</p>
+  </div>
+
+  <div class="card"><div class="cardbody">
+    <div class="ctrlrow">
+      <div class="field grow">
+        <label>輸入句子</label>
+        <input class="input" id="sentence" placeholder="輸入中文或英文，最多 12 個 token">
+        <div class="samples" id="samples"></div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="cardbody">
+    <div class="ctrlrow">
+      <div class="field"><label>d<sub>k</sub>（key 維度）</label>
+        <div class="slider"><input type="range" id="dk" min="1" max="8" step="1" value="5"><span class="val" id="dkv"></span></div></div>
+      <div class="field"><label>head 數</label>
+        <div class="slider"><input type="range" id="nh" min="1" max="4" step="1" value="3"><span class="val" id="nhv"></span></div></div>
+      <div class="field"><label>權重亂數種子</label>
+        <div class="slider"><input type="range" id="seed" min="1" max="99" step="1" value="23"><span class="val" id="seedv"></span></div></div>
+      <label class="switch" id="swScale"><input type="checkbox" id="scale" checked>除以 √d<sub>k</sub></label>
+      <label class="switch" id="swMask"><input type="checkbox" id="mask">加上 causal mask</label>
+      <button class="btn" id="dice">🎲 換一組權重</button>
+    </div>
+    <p class="note" id="cfgNote"></p>
+  </div></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="cardhead"><strong>注意力流向圖</strong><span class="sub" id="arcSub"></span></div>
+      <div class="cardbody">
+        <div class="tokens" id="tokens" style="margin-bottom:12px"></div>
+        <svg id="arc" viewBox="0 0 900 250" style="width:100%;height:auto;display:block"></svg>
+        <p class="note">線越粗＝那個字分到的注意力越多。<b>點上面的字</b>換成別的 query。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><strong>這個字的注意力分布</strong><span class="sub">α = softmax(e)</span></div>
+      <div class="cardbody">
+        <div class="bars" id="qbars"></div>
+        <dl class="kv" id="qkv"></dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead">
+      <strong>注意力矩陣</strong>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="segbtns" id="hmMode">
+          <button data-m="a" class="on">權重 α</button>
+          <button data-m="e">分數 e</button>
+        </div>
+        <div class="legend"><span>低</span><div class="ramp" id="ramp"></div><span>高</span></div>
+      </div>
+    </div>
+    <div class="cardbody">
+      <div class="hmscroll"><div class="hm" id="hm"></div></div>
+      <p class="note" id="hmNote"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>算式拆解</strong><span class="sub">用現在畫面上的真實數字</span></div>
+    <div class="cardbody"><ol class="steps" id="steps"></ol></div>
+  </div>
+
+  <div class="card" id="headsCard">
+    <div class="cardhead"><strong>Multi-head：每個 head 看的東西不一樣</strong><span class="sub">點縮圖切換主畫面</span></div>
+    <div class="cardbody">
+      <div class="heads" id="heads"></div>
+      <p class="note">同一句話、同一組輸入，只是 W<sup>Q</sup>／W<sup>K</sup>／W<sup>V</sup> 不同，注意力的樣子就完全不同。
+        原論文用 8 個 head，最後把結果 concat 起來。</p>
+    </div>
+  </div>
+
+  <div class="card"><div class="cardbody">
+    <details class="more"><summary>看 X、Q、K、V 四個矩陣長什麼樣子</summary>
+      <div class="matgrid" id="mats"></div>
+      <p class="note">每一列（row）是一個 token。X 是 embedding；Q=XW<sup>Q</sup>、K=XW<sup>K</sup>、V=XW<sup>V</sup>。
+        顏色只表示數值大小：<span style="color:var(--blue)">藍＝負</span>、<span style="color:var(--warm)">橘＝正</span>。</p>
+    </details>
+  </div></div>
+</section>
+
+<!-- ================= 02 SOFTMAX ================= -->
+<section id="v-softmax" hidden>
+  <div class="hero">
+    <div class="eyebrow">Module 02</div>
+    <h1>為什麼要除以 √d<sub>k</sub>？</h1>
+    <p class="lede">內積算出來的分數如果差距太大，softmax 會變成「贏者通吃」——第一名吃掉 6 成，其他人幾乎被忽略。
+      除以 √d<sub>k</sub> 把分數壓平一點，注意力才分得開。下面的五個分數可以自己拉。</p>
+  </div>
+
+  <div class="card"><div class="cardbody">
+    <div class="ctrlrow" style="margin-bottom:14px">
+      <div class="field"><label>d<sub>k</sub></label>
+        <div class="slider"><input type="range" id="sdk" min="1" max="64" step="1" value="5"><span class="val" id="sdkv">5</span></div></div>
+      <button class="btn" data-preset="lecture">講義原例</button>
+      <button class="btn" data-preset="extreme">差距超大</button>
+      <button class="btn" data-preset="flat">本來就很平均</button>
+      <button class="btn" data-preset="random">🎲 隨機</button>
+    </div>
+    <div id="sliders"></div>
+  </div></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="cardhead"><strong>直接 softmax(e)</strong><span class="sub" id="s1sub"></span></div>
+      <div class="cardbody"><div class="bars" id="sbars1"></div></div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><strong>softmax(e / √d<sub>k</sub>)</strong><span class="sub" id="s2sub"></span></div>
+      <div class="cardbody"><div class="bars" id="sbars2"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>兩者差多少</strong></div>
+    <div class="cardbody">
+      <div style="overflow-x:auto"><table class="t" id="stable"></table></div>
+      <p class="note" id="snote"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 POSITION ================= -->
+<section id="v-pos" hidden>
+  <div class="hero">
+    <div class="eyebrow">Module 03</div>
+    <h1>位置編碼時鐘</h1>
+    <p class="lede">Self-Attention 本身看不出字的先後順序，所以要在 embedding 上加一個「位置向量」。
+      原論文的做法：把維度兩兩一組當成一根時鐘指針，<code>θ = ω<sub>k</sub> · t</code>，從 12 點開始順時鐘走。
+      前面的指針走得快（像秒針），後面的走得慢（像時針）。</p>
+  </div>
+
+  <div class="card"><div class="cardbody">
+    <div class="ctrlrow">
+      <div class="field"><label>位置 t</label>
+        <div class="slider"><input type="range" id="pt" min="0" max="60" step="1" value="0"><span class="val" id="ptv">0</span></div></div>
+      <div class="field"><label>維度 d</label>
+        <div class="slider"><input type="range" id="pd" min="4" max="24" step="2" value="12"><span class="val" id="pdv">12</span></div></div>
+      <button class="btn primary" id="playPos">▶ 讓時間走</button>
+    </div>
+    <div class="eq">ω<sub>k</sub> = 1 / 10000<sup>2k/d</sup>　　p<sub>2k</sub> = sin(ω<sub>k</sub>t)　　p<sub>2k+1</sub> = cos(ω<sub>k</sub>t)</div>
+  </div></div>
+
+  <div class="card">
+    <div class="cardhead"><strong>每一對維度 = 一根指針</strong><span class="sub" id="clockSub"></span></div>
+    <div class="cardbody"><div id="clocks" style="display:flex;gap:14px;flex-wrap:wrap"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="cardhead"><strong>整張位置編碼表</strong><span class="sub">列＝位置，行＝維度</span></div>
+      <div class="cardbody">
+        <div class="hmscroll"><div class="hm compact" id="pehm"></div></div>
+        <p class="note">左邊幾行變化很快，越往右越慢——這就是「個位數、十位數、百位數」的感覺。
+          目前的 <code>t</code> 那一列會有外框。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><strong>位置之間有多像</strong><span class="sub">⟨p<sub>t</sub>, p<sub>t′</sub>⟩</span></div>
+      <div class="cardbody">
+        <svg id="pesim" viewBox="0 0 420 220" style="width:100%;height:auto;display:block"></svg>
+        <p class="note">兩個位置的內積在 <code>t′ = t</code> 最高，離越遠越低。模型因此可以感覺到「相對距離」。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 RACE ================= -->
+<section id="v-race" hidden>
+  <div class="hero">
+    <div class="eyebrow">Module 04</div>
+    <h1>RNN vs Transformer：為什麼換掉 RNN</h1>
+    <p class="lede">RNN 的 <code>h<sub>t</sub> = σ(x<sub>t</sub>W<sup>x</sup> + h<sub>t−1</sub>W<sup>h</sup> + b)</code>
+      必須等上一個時間點算完才能算下一個，所以沒辦法平行。Self-Attention 一次看全部，一步就算完。
+      按下開始，看兩邊跑完同一句話要幾步。</p>
+  </div>
+
+  <div class="card"><div class="cardbody">
+    <div class="ctrlrow">
+      <div class="field"><label>句子長度 T</label>
+        <div class="slider"><input type="range" id="rt" min="4" max="16" step="1" value="9"><span class="val" id="rtv">9</span></div></div>
+      <div class="field"><label>每步耗時</label>
+        <div class="slider"><input type="range" id="rspd" min="80" max="500" step="20" value="260"><span class="val" id="rspdv">260</span></div></div>
+      <button class="btn primary" id="go">▶ 開始</button>
+      <button class="btn" id="reset">重設</button>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="cardbody">
+    <div class="track">
+      <div class="trackhead"><strong>🐢 RNN（遞歸）</strong><span class="st" id="st1">待機</span></div>
+      <div class="cells" id="c1"></div>
+    </div>
+    <div class="track">
+      <div class="trackhead"><strong>⚡ Self-Attention（平行）</strong><span class="st" id="st2">待機</span></div>
+      <div class="cells" id="c2"></div>
+    </div>
+    <div class="verdict" id="verdict">按「開始」跑跑看。</div>
+  </div></div>
+
+  <div class="card">
+    <div class="cardhead"><strong>天下沒有白吃的午餐</strong></div>
+    <div class="cardbody">
+      <div style="overflow-x:auto"><table class="t" id="rtable"></table></div>
+      <p class="note">Transformer 快在「<b>步數</b>」只要 1 步，但它要算 <b>T²</b> 個內積——長度一變兩倍，計算量變四倍。
+        這就是為什麼長文本（long context）到今天還是個難題。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05 ABOUT ================= -->
+<section id="v-about" hidden>
+  <div class="hero">
+    <div class="eyebrow">Module 05</div>
+    <h1>規格與說明</h1>
+    <p class="lede">這個網頁是「生成式 AI 導論」第五講〈AI 怎麼記得前面說過什麼〉的互動版筆記，
+      用 Vibe Coding 完成：先和 AI 討論出規格書，再請 AI 生成單一 <code>index.html</code>。</p>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>這個網頁想解決什麼問題</strong></div>
+    <div class="cardbody">
+      <p class="note" style="font-size:14px">
+        第五講的公式（<code>softmax(QKᵀ/√d<sub>k</sub>)V</code>）在投影片上是<b>靜止</b>的：
+        看得到式子，但看不到「改一個東西，結果會怎麼變」。<br>
+        所以我把四個最容易卡住的點做成可以<b>動手拉</b>的模組：注意力到底分給誰、√d<sub>k</sub> 到底在救什麼、
+        位置編碼為什麼像時鐘、RNN 慢在哪裡。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>四個模組對應的講義內容</strong></div>
+    <div class="cardbody"><div style="overflow-x:auto"><table class="t">
+      <thead><tr><th>模組</th><th>講義對應</th><th>互動設計</th></tr></thead>
+      <tbody>
+        <tr><td>01 Self-Attention 實驗室</td><td>Q/K/V、注意力公式、multi-head</td>
+          <td>自由輸入句子；調 d<sub>k</sub>／head 數／亂數種子；開關 √d<sub>k</sub> 與 causal mask；點字換 query；熱力圖可點可 hover</td></tr>
+        <tr><td>02 softmax 與 √d<sub>k</sub></td><td>講義那張 61/30/3/2/4 的表</td>
+          <td>五個分數用拉桿即時改；兩張長條圖同步比較；算熵與最大佔比</td></tr>
+        <tr><td>03 位置編碼時鐘</td><td>sin/cos position encoding、「時鐘指針」比喻</td>
+          <td>t 與 d 可調、可自動播放；d/2 個時鐘同步轉；整張 PE 表＋位置相似度曲線</td></tr>
+        <tr><td>04 RNN vs Transformer</td><td>RNN 無法平行化</td>
+          <td>同一句話兩邊同時跑的動畫，比步數、比內積次數</td></tr>
+      </tbody>
+    </table></div></div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>技術規格</strong></div>
+    <div class="cardbody"><div style="overflow-x:auto"><table class="t">
+      <tbody>
+        <tr><td>檔案</td><td>單一 <code>index.html</code>，CSS 與 JavaScript 全部內嵌</td></tr>
+        <tr><td>相依套件</td><td>零。沒有 CDN、沒有外部字型、沒有圖片，斷網也能跑</td></tr>
+        <tr><td>矩陣運算</td><td>純手寫 JavaScript：matmul、transpose、softmax、Box–Muller 常態亂數</td></tr>
+        <tr><td>繪圖</td><td>熱力圖用 CSS Grid；流向圖、時鐘、折線圖用手寫 SVG</td></tr>
+        <tr><td>決定性</td><td>FNV-1a 雜湊 + mulberry32 PRNG：同一個字永遠拿到同一個 embedding，同一個種子永遠拿到同一組權重</td></tr>
+        <tr><td>狀態保存</td><td>句子與各項設定存在 localStorage，重新整理不會不見</td></tr>
+        <tr><td>相容性</td><td>桌機／手機自適應；深淺色主題；尊重 prefers-reduced-motion</td></tr>
+      </tbody>
+    </table></div></div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>⚠ 一個重要的誠實說明</strong></div>
+    <div class="cardbody">
+      <p class="note" style="font-size:14px">
+        這裡的 W<sup>Q</sup>、W<sup>K</sup>、W<sup>V</sup> 是<b>隨機初始化、沒有訓練過</b>的，
+        token embedding 也是用字串雜湊生出來的，不是真的語意向量。<br><br>
+        所以——<b>請不要</b>從這裡的注意力分布去解讀「AI 覺得『貓』跟『追』有關係」，那是沒有意義的。
+        這個工具要展示的是<b>運算的流程與形狀</b>：矩陣怎麼相乘、softmax 怎麼把分數變成機率、
+        √d<sub>k</sub> 怎麼影響分布、mask 怎麼把右上角切掉。<br><br>
+        要有語意，得餵真正訓練好的權重——那就不是一個 8 KB 的 HTML 檔塞得下的東西了。
+        我覺得把這件事講清楚，比假裝它很聰明重要。
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><strong>用法小抄</strong></div>
+    <div class="cardbody"><ol class="steps">
+      <li>在模組 01 輸入一句話（或按範例），<b>點任一個字</b>把它設成 query。</li>
+      <li>把「除以 √d<sub>k</sub>」<b>關掉</b>，看熱力圖是不是變得「黑白分明」——那就是贏者通吃。</li>
+      <li>打開 <b>causal mask</b>，右上三角會整片消失：decoder 就是這樣遮住還沒生出來的字。</li>
+      <li>拉 <b>head 數</b> 到 4，看下面四張縮圖長得完全不一樣。</li>
+      <li>去模組 03 按「<b>讓時間走</b>」，看左邊的指針飛快轉、右邊的幾乎不動。</li>
+    </ol></div>
+  </div>
+</section>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ 小工具 ============ */
+var $=function(id){return document.getElementById(id)};
+var KEY='attnlab:';
+function store(k,v){try{localStorage.setItem(KEY+k,String(v))}catch(e){}}
+function load(k,d){try{var v=localStorage.getItem(KEY+k);return v===null?d:v}catch(e){return d}}
+var tTimer;
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(tTimer);tTimer=setTimeout(function(){t.classList.remove('show')},1700)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function f(x,n){n=n==null?2:n;var v=Number(x);if(!isFinite(v))return '—';
+  var s=v.toFixed(n);return s==='-'+(0).toFixed(n)?(0).toFixed(n):s}
+function clamp(v,a,b){return v<a?a:v>b?b:v}
+
+/* 決定性亂數：FNV-1a + mulberry32 */
+function hash32(s){var h=2166136261>>>0;
+  for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
+  return h>>>0}
+function rngOf(s){var a=hash32(s);return function(){
+  a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296}}
+function gaussOf(r){return function(){var u=0,v=0;
+  while(u===0)u=r();while(v===0)v=r();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}}
+
+/* 線性代數 */
+function matmul(A,B){var n=A.length,m=B.length,p=B[0].length,C=new Array(n);
+  for(var i=0;i<n;i++){var row=new Array(p);
+    for(var j=0;j<p;j++){var s=0;for(var k=0;k<m;k++)s+=A[i][k]*B[k][j];row[j]=s}
+    C[i]=row}
+  return C}
+function transpose(A){var n=A.length,m=A[0].length,T=new Array(m);
+  for(var j=0;j<m;j++){T[j]=new Array(n);for(var i=0;i<n;i++)T[j][i]=A[i][j]}
+  return T}
+function softmax(a){var mx=-Infinity,i;
+  for(i=0;i<a.length;i++)if(a[i]>mx)mx=a[i];
+  if(!isFinite(mx))return a.map(function(){return 0});
+  var ex=a.map(function(v){return isFinite(v)?Math.exp(v-mx):0}),s=0;
+  for(i=0;i<ex.length;i++)s+=ex[i];
+  return s===0?ex:ex.map(function(v){return v/s})}
+function entropy(p){var h=0;for(var i=0;i<p.length;i++)if(p[i]>1e-12)h-=p[i]*Math.log2(p[i]);return h}
+function maxAbs(M){var m=1e-9;for(var i=0;i<M.length;i++)for(var j=0;j<M[i].length;j++){
+  var v=Math.abs(M[i][j]);if(isFinite(v)&&v>m)m=v}return m}
+
+/* 顏色 */
+function seqCol(v){return 'rgba(var(--accent-rgb),'+(0.05+0.95*clamp(v,0,1)).toFixed(3)+')'}
+function divCol(v){v=clamp(v,-1,1);
+  return v>=0?'rgba(var(--warm-rgb),'+(0.05+0.9*v).toFixed(3)+')'
+             :'rgba(var(--blue-rgb),'+(0.05+0.9*-v).toFixed(3)+')'}
+
+/* ============ 主題 / 分頁 ============ */
+var th=load('theme','');
+if(th)document.documentElement.setAttribute('data-theme',th);
+else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)
+  document.documentElement.setAttribute('data-theme','dark');
+$('themeBtn').onclick=function(){
+  var nx=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',nx);store('theme',nx);drawAll()};
+
+var VIEWS=['attn','softmax','pos','race','about'];
+function show(v){
+  VIEWS.forEach(function(x){$('v-'+x).hidden=(x!==v)});
+  [].forEach.call(document.querySelectorAll('.tab'),function(b){
+    b.classList.toggle('active',b.dataset.v===v)});
+  store('view',v);window.scrollTo({top:0,behavior:'smooth'});
+  if(v==='pos')drawPos();if(v==='race')buildRace();if(v==='softmax')drawSoftmax()}
+$('tabbar').addEventListener('click',function(e){
+  var b=e.target.closest('.tab');if(b)show(b.dataset.v)});
+
+/* ================================================================
+   MODULE 01 — Self-Attention
+   ================================================================ */
+var DM=8, MAXTOK=12;
+var SAMPLES=['我 今天 很 早 就 起床 了','貓 追 老鼠 跑 過 院子',
+  'the cat sat on the mat','注意力 就是 加權 平均','她 把 書 還 給 我 了'];
+
+var S={tokens:[],q:0,hmMode:'a',head:0,cache:null};
+
+/* 中日韓文字與全形標點逐字切；拉丁字母整個單字當一個 token */
+var CJK=/[⺀-鿿豈-﫿　-〿＀-￯]/;
+function tokenize(s){
+  s=String(s||'').trim();if(!s)return [];
+  var parts=s.split(/\s+/),out=[];
+  parts.forEach(function(w){
+    var buf='';
+    for(var i=0;i<w.length;i++){
+      var ch=w.charAt(i);
+      if(CJK.test(ch)){
+        if(buf){out.push(buf);buf=''}
+        out.push(ch);
+      } else buf+=ch;
+    }
+    if(buf)out.push(buf);
+  });
+  return out.filter(Boolean).slice(0,MAXTOK);
+}
+/* embedding 做 L2 normalize、W 用標準常態 —— 這樣 q、k 的每個分量大約是
+   unit variance，正好是論文在討論「為什麼要除以 √dk」時假設的情境：
+   q·k 的標準差 ≈ √dk，除完之後 ≈ 1，softmax 才不會一面倒。
+   （一開始沒做正規化，embedding 範數約 3.5，分數標準差衝到 5.4，
+   　每一列都變成 99% 集中在單一個字，整張熱力圖毫無資訊量。）*/
+function embed(tok){
+  var g=gaussOf(rngOf('emb|'+tok)),v=new Array(DM),n=0,i;
+  for(i=0;i<DM;i++){v[i]=g();n+=v[i]*v[i]}
+  n=Math.sqrt(n)||1;
+  for(i=0;i<DM;i++)v[i]/=n;
+  return v}
+function randMat(r,c,tag){
+  var g=gaussOf(rngOf(tag)),M=new Array(r);
+  for(var i=0;i<r;i++){M[i]=new Array(c);for(var j=0;j<c;j++)M[i][j]=g()}
+  return M}
+
+function cfg(){return{
+  dk:+$('dk').value, nh:+$('nh').value, seed:+$('seed').value,
+  scale:$('scale').checked, mask:$('mask').checked}}
+
+function compute(head){
+  var c=cfg(),T=S.tokens.length;
+  if(!T)return null;
+  var X=S.tokens.map(embed);
+  var tag='s'+c.seed+'|h'+head+'|d'+c.dk;
+  var WQ=randMat(DM,c.dk,tag+'|Q'),WK=randMat(DM,c.dk,tag+'|K'),WV=randMat(DM,c.dk,tag+'|V');
+  var Q=matmul(X,WQ),K=matmul(X,WK),V=matmul(X,WV);
+  var raw=matmul(Q,transpose(K));
+  var div=c.scale?Math.sqrt(c.dk):1;
+  var E=raw.map(function(r,i){return r.map(function(v,j){
+    if(c.mask&&j>i)return -Infinity;
+    return v/div})});
+  var A=E.map(softmax);
+  var O=matmul(A.map(function(r){return r.map(function(v){return v})}),V);
+  return {X:X,Q:Q,K:K,V:V,raw:raw,E:E,A:A,O:O,div:div,c:c,T:T};
+}
+
+function renderTokens(){
+  $('tokens').innerHTML=S.tokens.map(function(t,i){
+    return '<button class="tok'+(i===S.q?' q':'')+'" data-i="'+i+'">'+
+      '<span class="i">'+i+'</span>'+esc(t)+'</button>'}).join('');
+}
+$('tokens').addEventListener('click',function(e){
+  var b=e.target.closest('.tok');if(!b)return;
+  S.q=+b.dataset.i;drawAttn()});
+
+function renderArc(R){
+  var T=R.T,W=900,H=250,pad=46;
+  var step=T>1?(W-pad*2)/(T-1):0;
+  var xs=[],i;
+  for(i=0;i<T;i++)xs.push(T>1?pad+step*i:W/2);
+  var baseY=204, a=R.A[S.q];
+  var svg='';
+  // arcs
+  for(i=0;i<T;i++){
+    var w=a[i];if(w<0.002)continue;
+    var x1=xs[S.q],x2=xs[i];
+    var sw=Math.max(1.2,w*26);
+    var op=(0.22+0.76*Math.sqrt(w)).toFixed(3);
+    if(i===S.q){
+      svg+='<path d="M '+(x1-13)+' '+(baseY-16)+' C '+(x1-30)+' '+(baseY-74)+', '+
+        (x2+30)+' '+(baseY-74)+', '+(x2+13)+' '+(baseY-16)+'" fill="none" '+
+        'stroke="rgba(var(--accent-rgb),'+op+')" stroke-width="'+sw.toFixed(2)+'" stroke-linecap="round"/>';
+    }else{
+      var h=Math.min(150,34+Math.abs(x2-x1)*0.44);
+      svg+='<path d="M '+x1+' '+(baseY-16)+' Q '+((x1+x2)/2)+' '+(baseY-16-h*1.5)+' '+x2+' '+(baseY-16)+'" '+
+        'fill="none" stroke="rgba(var(--accent-rgb),'+op+')" stroke-width="'+sw.toFixed(2)+'" stroke-linecap="round"/>';
+    }
+  }
+  // token boxes
+  for(i=0;i<T;i++){
+    var isQ=i===S.q, lab=S.tokens[i];
+    var bw=Math.max(30,Math.min(96,lab.length*15+20));
+    svg+='<g class="arctok" data-i="'+i+'" style="cursor:pointer">'+
+      '<rect x="'+(xs[i]-bw/2)+'" y="'+(baseY-14)+'" width="'+bw+'" height="30" rx="7" '+
+      'fill="'+(isQ?'var(--accent)':'var(--panel-2)')+'" stroke="'+(isQ?'var(--accent)':'var(--line)')+'"/>'+
+      '<text x="'+xs[i]+'" y="'+(baseY+6)+'" text-anchor="middle" font-size="14" '+
+      'fill="'+(isQ?'var(--panel)':'var(--text)')+'" font-weight="'+(isQ?'700':'400')+'">'+esc(lab)+'</text>'+
+      '<text x="'+xs[i]+'" y="'+(baseY+36)+'" text-anchor="middle" font-size="10.5" '+
+      'font-family="var(--f-mono)" fill="'+(isQ?'var(--accent)':'var(--muted)')+'">'+
+      (a[i]*100).toFixed(0)+'%</text></g>';
+  }
+  var s=$('arc');
+  s.setAttribute('viewBox','0 0 '+W+' '+H);
+  s.innerHTML=svg;
+}
+$('arc').addEventListener('click',function(e){
+  var g=e.target.closest('.arctok');if(!g)return;
+  S.q=+g.dataset.i;drawAttn()});
+
+function renderBars(R){
+  var a=R.A[S.q],mx=Math.max.apply(null,a.concat([1e-9]));
+  var top=a.indexOf(mx);
+  $('qbars').innerHTML=S.tokens.map(function(t,i){
+    return '<div class="barrow'+(i===top?' top':'')+'">'+
+      '<div class="nm">'+esc(t)+'</div>'+
+      '<div class="bartrack"><div class="barfill" style="width:'+(a[i]*100).toFixed(2)+'%"></div></div>'+
+      '<div class="pc">'+(a[i]*100).toFixed(1)+'%</div></div>'}).join('');
+  var o=R.O[S.q];
+  $('qkv').innerHTML=
+    '<dt>query</dt><dd>“'+esc(S.tokens[S.q])+'” (i='+S.q+')</dd>'+
+    '<dt>最注意</dt><dd>“'+esc(S.tokens[top])+'” · '+(mx*100).toFixed(1)+'%</dd>'+
+    '<dt>分布熵</dt><dd>'+f(entropy(a))+' bit（滿分 '+f(Math.log2(R.T))+'）</dd>'+
+    '<dt>輸出 h</dt><dd>['+o.map(function(v){return f(v)}).join(', ')+']</dd>';
+}
+
+function renderHM(R){
+  var T=R.T,mode=S.hmMode;
+  var M=mode==='a'?R.A:R.E;
+  var mx=mode==='a'?1:maxAbs(R.E);
+  var h='<div class="hmlbl corner">Q＼K</div>';
+  var i,j;
+  for(j=0;j<T;j++)h+='<div class="hmlbl">'+esc(S.tokens[j])+'</div>';
+  for(i=0;i<T;i++){
+    h+='<div class="hmlbl row'+(i===S.q?' sel':'')+'" data-r="'+i+'">'+esc(S.tokens[i])+'</div>';
+    for(j=0;j<T;j++){
+      /* 用設定判斷有沒有被遮，不要用 isFinite：
+         α 矩陣裡被遮的格子是 0（有限值），只有 E 矩陣才是 −∞ */
+      var v=M[i][j],blocked=(R.c.mask&&j>i)||!isFinite(v);
+      var bg,txt,col;
+      if(blocked){bg='var(--cell)';txt='–';col='var(--muted)'}
+      else if(mode==='a'){var n=v/mx;bg=seqCol(n);txt=(v*100).toFixed(0);col=n>0.55?'#fff':'var(--muted)'}
+      else {var n2=v/mx;bg=divCol(n2);txt=f(v,1);col=Math.abs(n2)>0.6?'#fff':'var(--muted)'}
+      h+='<div class="hmcell'+(i===S.q?'':' dim')+'" data-r="'+i+'" data-c="'+j+'" '+
+        'style="background:'+bg+';color:'+col+'" title="'+esc(S.tokens[i])+' → '+esc(S.tokens[j])+
+        '　e='+f(R.E[i][j])+'　α='+(R.A[i][j]*100).toFixed(1)+'%">'+txt+'</div>';
+    }
+  }
+  var el=$('hm');
+  el.style.gridTemplateColumns='52px repeat('+T+',minmax(34px,1fr))';
+  el.innerHTML=h;
+  $('ramp').style.background=mode==='a'
+    ? 'linear-gradient(90deg,rgba(var(--accent-rgb),.05),rgba(var(--accent-rgb),1))'
+    : 'linear-gradient(90deg,rgba(var(--blue-rgb),.95),var(--cell),rgba(var(--warm-rgb),.95))';
+  $('hmNote').innerHTML = mode==='a'
+    ? '格子裡是百分比，<b>每一列加起來剛好 100%</b>——這就是 softmax 的工作。顏色亮的那一列是現在選的 query。'
+    : '格子裡是 <code>q·k'+(R.c.scale?' ÷ √'+R.c.dk:'')+'</code> 的原始分數，可以是負的。'+
+      '<span style="color:var(--warm)">橘＝正</span>、<span style="color:var(--blue)">藍＝負</span>。'+
+      (R.c.mask?'被 mask 的格子顯示「–」。':'');
+}
+$('hm').addEventListener('click',function(e){
+  var c=e.target.closest('[data-r]');if(!c)return;
+  S.q=+c.dataset.r;drawAttn()});
+$('hmMode').addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b)return;
+  S.hmMode=b.dataset.m;
+  [].forEach.call(this.children,function(x){x.classList.toggle('on',x===b)});
+  drawAttn()});
+
+function renderSteps(R){
+  var i=S.q, a=R.A[i];
+  var best=a.indexOf(Math.max.apply(null,a));
+  var c=R.c;
+  var dot=R.raw[i][best];
+  $('steps').innerHTML=
+    '<li>「'+esc(S.tokens[i])+'」的 embedding <b>x'+i+'</b> 是 '+DM+' 維；乘上 W<sup>Q</sup>（'+DM+'×'+c.dk+'）得到 '+
+      '<b>q'+i+' = ['+R.Q[i].map(function(v){return f(v)}).join(', ')+']</b>。</li>'+
+    '<li>每個字也各自算出自己的 <b>k</b> 和 <b>v</b>，疊起來就是矩陣 K、V（'+R.T+'×'+c.dk+'）。</li>'+
+    '<li>q'+i+' 和每個 k 做內積 → 得到 '+R.T+' 個分數。對「'+esc(S.tokens[best])+'」是 <b>'+f(dot)+'</b>。</li>'+
+    (c.scale
+      ? '<li>除以 √d<sub>k</sub> = √'+c.dk+' = '+f(Math.sqrt(c.dk))+'　→　<b>'+f(dot)+' ÷ '+f(Math.sqrt(c.dk))+' = '+f(R.E[i][best])+'</b>'+
+        '　<span class="pill">避免贏者通吃</span></li>'
+      : '<li><b>沒有</b>除以 √d<sub>k</sub>（你把它關掉了）。分數直接進 softmax，分布會比較極端。'+
+        '　<span class="pill w">已關閉</span></li>')+
+    (c.mask
+      ? '<li>Causal mask：把 j &gt; '+i+' 的位置設成 −∞，softmax 之後就是 0——「'+esc(S.tokens[i])+'」看不到它後面的字。'+
+        '　<span class="pill w">mask 開啟</span></li>'
+      : '<li>沒有 mask，所以每個字都看得到整句話（encoder 的做法）。</li>')+
+    '<li>softmax 把這 '+R.T+' 個分數變成加起來等於 1 的權重 → α = ['+
+      a.map(function(v){return (v*100).toFixed(0)+'%'}).join(', ')+']。</li>'+
+    '<li>最後 <b>h'+i+' = Σ α<sub>t</sub> v<sub>t</sub></b>，把所有 v 按權重加起來，得到這個字的新向量。</li>';
+}
+
+function renderHeads(){
+  var c=cfg();
+  $('headsCard').hidden=(c.nh<2);
+  if(c.nh<2)return;
+  var h='';
+  for(var n=0;n<c.nh;n++){
+    var R=compute(n);if(!R)break;
+    var cells='';
+    for(var i=0;i<R.T;i++)for(var j=0;j<R.T;j++)
+      cells+='<div class="minicell" style="background:'+seqCol(R.A[i][j])+'"></div>';
+    h+='<div class="headcard'+(n===S.head?' on':'')+'" data-h="'+n+'">'+
+      '<div class="ht">head '+(n+1)+'</div>'+
+      '<div class="mini" style="grid-template-columns:repeat('+R.T+',13px)">'+cells+'</div></div>';
+  }
+  $('heads').innerHTML=h;
+}
+$('heads').addEventListener('click',function(e){
+  var c=e.target.closest('.headcard');if(!c)return;
+  S.head=+c.dataset.h;drawAttn();toast('切換到 head '+(S.head+1))});
+
+function renderMats(R){
+  function box(name,M,sub){
+    var mx=maxAbs(M),h='';
+    for(var i=0;i<M.length;i++){
+      h+='<div class="mrow" style="grid-template-columns:repeat('+M[i].length+',17px)">';
+      for(var j=0;j<M[i].length;j++)
+        h+='<div class="mcell" title="'+f(M[i][j])+'" style="background:'+divCol(M[i][j]/mx)+'"></div>';
+      h+='</div>';
+    }
+    return '<div class="matbox"><div class="mt">'+name+'　'+M.length+'×'+M[0].length+
+      (sub?'　'+sub:'')+'</div>'+h+'</div>';
+  }
+  $('mats').innerHTML=box('X（embedding）',R.X)+box('Q = XW<sup>Q</sup>',R.Q)+
+    box('K = XW<sup>K</sup>',R.K)+box('V = XW<sup>V</sup>',R.V);
+}
+
+function drawAttn(){
+  var c=cfg();
+  if(S.head>=c.nh)S.head=0;
+  var R=compute(S.head);
+  if(!R){
+    $('tokens').innerHTML='<span class="sub">請在上面輸入一句話</span>';
+    $('arc').innerHTML='';$('qbars').innerHTML='';$('qkv').innerHTML='';
+    $('hm').innerHTML='';$('steps').innerHTML='';$('mats').innerHTML='';
+    $('headsCard').hidden=true;return;
+  }
+  if(S.q>=R.T)S.q=0;
+  S.cache=R;
+  $('arcSub').textContent='head '+(S.head+1)+'/'+c.nh+' · T='+R.T;
+  $('cfgNote').innerHTML='目前：'+R.T+' 個 token，d<sub>model</sub>='+DM+'，d<sub>k</sub>='+c.dk+
+    '，'+c.nh+' 個 head。注意力矩陣是 '+R.T+'×'+R.T+' = <b>'+(R.T*R.T)+'</b> 個內積。'+
+    (c.scale?'':' <span class="pill w">√d<sub>k</sub> 已關閉</span>')+
+    (c.mask?' <span class="pill w">causal mask 開啟</span>':'');
+  renderTokens();renderArc(R);renderBars(R);renderHM(R);renderSteps(R);renderHeads();renderMats(R);
+}
+
+/* 控制項綁定 */
+function bindRange(id,vid,key,cb){
+  var el=$(id),out=$(vid);
+  var saved=load(key,null);
+  if(saved!==null)el.value=saved;
+  out.textContent=el.value;
+  el.addEventListener('input',function(){out.textContent=el.value;store(key,el.value);cb()});
+}
+bindRange('dk','dkv','dk',drawAttn);
+bindRange('nh','nhv','nh',drawAttn);
+bindRange('seed','seedv','seed',drawAttn);
+
+function bindSw(id,wrapId,key){
+  var el=$(id),w=$(wrapId);
+  var sv=load(key,null);
+  if(sv!==null)el.checked=(sv==='true');
+  w.classList.toggle('on',el.checked);
+  el.addEventListener('change',function(){
+    w.classList.toggle('on',el.checked);store(key,el.checked);drawAttn()});
+}
+bindSw('scale','swScale','scale');
+bindSw('mask','swMask','mask');
+
+$('dice').onclick=function(){
+  var v=1+Math.floor(Math.random()*99);
+  $('seed').value=v;$('seedv').textContent=v;store('seed',v);
+  drawAttn();toast('種子 → '+v)};
+
+$('sentence').value=load('sentence',SAMPLES[0]);
+$('samples').innerHTML='範例：'+SAMPLES.map(function(s){
+  return '<button class="chipbtn" data-s="'+esc(s)+'">'+esc(s)+'</button>'}).join('');
+$('samples').addEventListener('click',function(e){
+  var b=e.target.closest('.chipbtn');if(!b)return;
+  $('sentence').value=b.dataset.s;onSentence()});
+function onSentence(){
+  var v=$('sentence').value;
+  store('sentence',v);
+  S.tokens=tokenize(v);S.q=0;drawAttn();
+}
+$('sentence').addEventListener('input',onSentence);
+S.tokens=tokenize($('sentence').value);
+
+/* ================================================================
+   MODULE 02 — softmax / √dk
+   ================================================================ */
+var SC=[3.9,3.2,1,0.3,1.1];
+var PRESETS={lecture:[3.9,3.2,1,0.3,1.1],extreme:[7.5,2,1.2,0.5,0.1],flat:[1.2,1.1,1.0,1.05,0.95]};
+
+function buildSliders(){
+  $('sliders').innerHTML=SC.map(function(v,i){
+    return '<div class="barrow" style="grid-template-columns:62px minmax(0,1fr) 54px;margin-bottom:7px">'+
+      '<div class="nm" style="font-family:var(--f-mono);font-size:12px">分數 e'+(i+1)+'</div>'+
+      '<input type="range" class="sc" data-i="'+i+'" min="-3" max="8" step="0.1" value="'+v+'" '+
+      'style="width:100%;accent-color:var(--accent)">'+
+      '<div class="pc" style="font-weight:700;color:var(--accent)">'+f(v,1)+'</div></div>'}).join('');
+}
+$('sliders').addEventListener('input',function(e){
+  var el=e.target;if(!el.classList.contains('sc'))return;
+  SC[+el.dataset.i]=+el.value;
+  el.nextElementSibling.textContent=f(+el.value,1);
+  drawSoftmax()});
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-preset]');if(!b)return;
+  var p=b.dataset.preset;
+  SC = p==='random' ? SC.map(function(){return Math.round((Math.random()*9-1.5)*10)/10})
+                    : PRESETS[p].slice();
+  buildSliders();drawSoftmax();toast('已套用：'+b.textContent)});
+
+function drawSoftmax(){
+  var dk=+$('sdk').value;$('sdkv').textContent=dk;
+  var rt=Math.sqrt(dk);
+  var p1=softmax(SC),p2=softmax(SC.map(function(v){return v/rt}));
+  function bars(el,p){
+    var mx=Math.max.apply(null,p),top=p.indexOf(mx);
+    $(el).innerHTML=p.map(function(v,i){
+      return '<div class="barrow'+(i===top?' top':'')+'">'+
+        '<div class="nm" style="font-family:var(--f-mono);font-size:12px">e'+(i+1)+'='+f(SC[i],1)+'</div>'+
+        '<div class="bartrack"><div class="barfill" style="width:'+(v*100).toFixed(2)+'%"></div></div>'+
+        '<div class="pc">'+(v*100).toFixed(1)+'%</div></div>'}).join('');
+  }
+  bars('sbars1',p1);bars('sbars2',p2);
+  $('s1sub').textContent='熵 '+f(entropy(p1))+' bit';
+  $('s2sub').textContent='÷ √'+dk+' = '+f(rt)+'　熵 '+f(entropy(p2))+' bit';
+  var m1=Math.max.apply(null,p1),m2=Math.max.apply(null,p2);
+  var h='<thead><tr><th>項目</th>'+SC.map(function(v,i){
+    return '<th class="n">e'+(i+1)+'</th>'}).join('')+'<th class="n">最大佔比</th><th class="n">熵</th></tr></thead><tbody>';
+  h+='<tr><td>直接 softmax</td>'+p1.map(function(v){
+    return '<td class="n">'+(v*100).toFixed(0)+'%</td>'}).join('')+
+    '<td class="n">'+(m1*100).toFixed(0)+'%</td><td class="n">'+f(entropy(p1))+'</td></tr>';
+  h+='<tr><td>÷ √'+dk+' 後 softmax</td>'+p2.map(function(v){
+    return '<td class="n">'+(v*100).toFixed(0)+'%</td>'}).join('')+
+    '<td class="n">'+(m2*100).toFixed(0)+'%</td><td class="n">'+f(entropy(p2))+'</td></tr>';
+  h+='</tbody>';
+  $('stable').innerHTML=h;
+  var drop=(m1-m2)*100, gain=entropy(p2)-entropy(p1);
+  $('snote').innerHTML='第一名的佔比從 <b>'+(m1*100).toFixed(0)+'%</b> 降到 <b>'+(m2*100).toFixed(0)+'%</b>'+
+    '（少了 '+f(Math.abs(drop),1)+' 個百分點），熵則'+(gain>=0?'上升':'下降')+' <b>'+f(Math.abs(gain))+
+    '</b> bit。熵越高代表注意力分得越開、越不會只盯著一個字。'+
+    '<br>把 d<sub>k</sub> 拉到 64（原論文的設定）再看一次，差距會更明顯；拉回 1 則兩邊完全一樣（√1 = 1）。';
+}
+
+$('sdk').addEventListener('input',drawSoftmax);
+buildSliders();
+
+/* ================================================================
+   MODULE 03 — Position encoding
+   ================================================================ */
+var posTimer=null;
+function peVec(t,d){
+  var v=new Array(d);
+  for(var k=0;k<d/2;k++){
+    var w=1/Math.pow(10000,2*k/d);
+    v[2*k]=Math.sin(w*t);v[2*k+1]=Math.cos(w*t);
+  }
+  return v}
+
+function drawPos(){
+  var t=+$('pt').value,d=+$('pd').value;
+  $('ptv').textContent=t;$('pdv').textContent=d;
+  var pairs=d/2,h='';
+  for(var k=0;k<pairs;k++){
+    var w=1/Math.pow(10000,2*k/d);
+    var th=w*t;
+    var x=36+26*Math.sin(th),y=36-26*Math.cos(th);
+    var per=2*Math.PI/w;
+    h+='<div style="text-align:center">'+
+      '<svg width="72" height="72" viewBox="0 0 72 72">'+
+      '<circle cx="36" cy="36" r="29" fill="var(--panel-2)" stroke="var(--line)"/>'+
+      '<line x1="36" y1="9" x2="36" y2="14" stroke="var(--muted)" stroke-width="1.5"/>'+
+      '<line x1="36" y1="36" x2="'+x.toFixed(2)+'" y2="'+y.toFixed(2)+'" '+
+        'stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round"/>'+
+      '<circle cx="36" cy="36" r="3" fill="var(--accent)"/></svg>'+
+      '<div style="font-family:var(--f-mono);font-size:10px;color:var(--muted);line-height:1.45">'+
+      'k='+k+'<br>dim '+(2*k)+','+(2*k+1)+'<br>週期 '+(per<1000?f(per,1):per.toExponential(1))+'</div></div>';
+  }
+  $('clocks').innerHTML=h;
+  $('clockSub').textContent='t = '+t+'　d = '+d+'　共 '+pairs+' 根指針';
+
+  // PE 表
+  var ROWS=28,hh='<div class="hmlbl corner">t＼dim</div>';
+  var j;
+  for(j=0;j<d;j++)hh+='<div class="hmlbl" style="font-family:var(--f-mono);font-size:9.5px">'+j+'</div>';
+  for(var r=0;r<ROWS;r++){
+    var v=peVec(r,d);
+    hh+='<div class="hmlbl row"'+(r===t?' style="color:var(--accent);font-weight:800"':'')+'>'+r+'</div>';
+    for(j=0;j<d;j++)
+      hh+='<div class="hmcell" style="min-width:20px;height:16px;background:'+divCol(v[j])+
+        (r===t?';outline:1.5px solid var(--accent);outline-offset:-1.5px':'')+
+        '" title="t='+r+' dim='+j+' = '+f(v[j])+'"></div>';
+  }
+  var el=$('pehm');
+  el.style.gridTemplateColumns='46px repeat('+d+',minmax(20px,1fr))';
+  el.innerHTML=hh;
+
+  // 相似度曲線
+  var pt=peVec(t,d),N=61,pts=[],mn=1e9,mx=-1e9,vals=[];
+  for(var tp=0;tp<N;tp++){
+    var q=peVec(tp,d),s=0;
+    for(j=0;j<d;j++)s+=pt[j]*q[j];
+    vals.push(s);if(s<mn)mn=s;if(s>mx)mx=s;
+  }
+  var W=420,H=220,L=36,B=28;
+  for(tp=0;tp<N;tp++){
+    var px=L+(W-L-10)*tp/(N-1);
+    var py=10+(H-B-10)*(1-(vals[tp]-mn)/(mx-mn||1));
+    pts.push(px.toFixed(1)+','+py.toFixed(1));
+  }
+  var cx=L+(W-L-10)*t/(N-1);
+  $('pesim').innerHTML=
+    '<line x1="'+L+'" y1="'+(H-B)+'" x2="'+(W-10)+'" y2="'+(H-B)+'" stroke="var(--line)"/>'+
+    '<line x1="'+L+'" y1="10" x2="'+L+'" y2="'+(H-B)+'" stroke="var(--line)"/>'+
+    '<line x1="'+cx.toFixed(1)+'" y1="10" x2="'+cx.toFixed(1)+'" y2="'+(H-B)+'" '+
+      'stroke="var(--warm)" stroke-width="1.5" stroke-dasharray="4 3"/>'+
+    '<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>'+
+    '<text x="'+L+'" y="'+(H-9)+'" font-size="10.5" font-family="var(--f-mono)" fill="var(--muted)">t′=0</text>'+
+    '<text x="'+(W-10)+'" y="'+(H-9)+'" font-size="10.5" font-family="var(--f-mono)" '+
+      'fill="var(--muted)" text-anchor="end">t′=60</text>'+
+    '<text x="'+cx.toFixed(1)+'" y="'+(H-9)+'" font-size="10.5" font-family="var(--f-mono)" '+
+      'fill="var(--warm)" text-anchor="middle">t='+t+'</text>'+
+    '<text x="4" y="18" font-size="10.5" font-family="var(--f-mono)" fill="var(--muted)">'+f(mx,1)+'</text>'+
+    '<text x="4" y="'+(H-B)+'" font-size="10.5" font-family="var(--f-mono)" fill="var(--muted)">'+f(mn,1)+'</text>';
+}
+$('pt').addEventListener('input',drawPos);
+$('pd').addEventListener('input',drawPos);
+$('playPos').onclick=function(){
+  if(posTimer){clearInterval(posTimer);posTimer=null;this.textContent='▶ 讓時間走';return}
+  this.textContent='⏸ 暫停';
+  var self=this;
+  posTimer=setInterval(function(){
+    var el=$('pt'),v=(+el.value+1)%61;
+    el.value=v;drawPos();
+  },260);
+};
+
+/* ================================================================
+   MODULE 04 — RNN vs Transformer race
+   ================================================================ */
+var raceTimer=null;
+function buildRace(){
+  var T=+$('rt').value;
+  $('rtv').textContent=T;$('rspdv').textContent=$('rspd').value;
+  var a='',b='';
+  for(var i=0;i<T;i++){
+    a+='<div class="rcell" id="a'+i+'">h'+i+'</div>'+(i<T-1?'<span class="arrow">→</span>':'');
+    b+='<div class="rcell" id="b'+i+'">h'+i+'</div>';
+  }
+  $('c1').innerHTML=a;$('c2').innerHTML=b;
+  $('st1').textContent='待機 · 需要 '+T+' 步';
+  $('st2').textContent='待機 · 需要 1 步';
+  var sp=+$('rspd').value;
+  $('rtable').innerHTML='<thead><tr><th></th><th class="n">RNN</th><th class="n">Self-Attention</th></tr></thead><tbody>'+
+    '<tr><td>依序的步數</td><td class="n">'+T+'</td><td class="n">1</td></tr>'+
+    '<tr><td>模擬耗時</td><td class="n">'+(T*sp)+' ms</td><td class="n">'+sp+' ms</td></tr>'+
+    '<tr><td>內積／乘加次數</td><td class="n">'+T+'（順序）</td><td class="n">'+(T*T)+'（可平行）</td></tr>'+
+    '<tr><td>最遠的兩個字要幾層才看得到彼此</td><td class="n">'+(T-1)+'</td><td class="n">1</td></tr>'+
+    '</tbody>';
+}
+function stopRace(){if(raceTimer){clearInterval(raceTimer);raceTimer=null}}
+$('go').onclick=function(){
+  stopRace();buildRace();
+  var T=+$('rt').value,sp=+$('rspd').value,step=0,t0=Date.now();
+  var bDone=false;
+  $('verdict').textContent='跑起來了…';
+  raceTimer=setInterval(function(){
+    // transformer：第一步全部一起亮
+    if(step===0){
+      for(var k=0;k<T;k++)$('b'+k).classList.add('act');
+      $('st2').textContent='全部同時計算中…';
+    }
+    if(step===1&&!bDone){
+      for(var k2=0;k2<T;k2++){$('b'+k2).classList.remove('act');$('b'+k2).classList.add('fin')}
+      $('st2').textContent='✓ 完成 · 1 步 · '+sp+' ms';bDone=true;
+    }
+    // rnn：一格一格
+    if(step>0&&step<=T){
+      if(step>1)$('a'+(step-2)).classList.replace('act','fin');
+      $('a'+(step-1)).classList.add('act');
+      $('st1').textContent='第 '+step+' / '+T+' 步（要等 h'+(step-2>=0?step-2:0)+' 算完）';
+    }
+    if(step===T+1){
+      $('a'+(T-1)).classList.replace('act','fin');
+      $('st1').textContent='✓ 完成 · '+T+' 步 · '+(T*sp)+' ms';
+      $('verdict').innerHTML='Self-Attention <b>'+sp+' ms</b> 就收工，RNN 花了 <b>'+(T*sp)+
+        ' ms</b>，慢 <b>'+T+' 倍</b>。句子越長差距越大——這就是 Transformer 取代 RNN 的主因。';
+      stopRace();
+    }
+    step++;
+  },sp);
+};
+$('reset').onclick=function(){stopRace();buildRace();$('verdict').textContent='按「開始」跑跑看。'};
+$('rt').addEventListener('input',function(){stopRace();buildRace()});
+$('rspd').addEventListener('input',function(){stopRace();buildRace()});
+
+/* ============ 啟動 ============ */
+function drawAll(){drawAttn();drawSoftmax();if(!$('v-pos').hidden)drawPos()}
+show(load('view','attn'));
+drawAttn();drawSoftmax();buildRace();
+
+})();
+</script>
+</body>
+</html>
