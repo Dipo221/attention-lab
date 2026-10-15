@@ -3,7 +3,7 @@
 > 生成式 AI 導論 — 第五講〈AI 怎麼記得前面說過什麼？〉的互動版筆記
 > 用 Vibe Coding 完成：先和 AI 討論出規格書，再請 AI 生成單一 `index.html`。
 
-**線上 Demo：** https://你的帳號.github.io/attention-lab/
+**線上 Demo：** https://Dipo221.github.io/attention-lab/
 
 ---
 
